@@ -1,26 +1,178 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5efe2;
+  --foreground: #1d2d2a;
+  --card: rgba(255, 251, 244, 0.86);
+  --card-strong: rgba(255, 249, 240, 0.96);
+  --line: rgba(31, 54, 49, 0.12);
+  --line-strong: rgba(31, 54, 49, 0.24);
+  --brand: #235847;
+  --brand-soft: #dcebdd;
+  --accent: #d46939;
+  --accent-soft: #ffe2d5;
+  --ink-soft: #5c6c67;
+  --shadow: 0 18px 60px rgba(31, 54, 49, 0.12);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-hind-siliguri);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-hind-siliguri), sans-serif;
+  background-image:
+    radial-gradient(circle at top left, rgba(212, 105, 57, 0.16), transparent 34%),
+    radial-gradient(circle at top right, rgba(35, 88, 71, 0.14), transparent 28%),
+    linear-gradient(180deg, #fbf6ea 0%, #f4ecdd 100%);
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(212, 105, 57, 0.18);
+}
+
+.paper-grid {
+  position: relative;
+}
+
+.paper-grid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(31, 54, 49, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 54, 49, 0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), transparent 95%);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+
+.card-strong {
+  background: var(--card-strong);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+}
+
+.section-title {
+  font-family: var(--font-space-grotesk), var(--font-hind-siliguri), sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.mono {
+  font-family: var(--font-jetbrains-mono), monospace;
+}
+
+.field {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.8rem 0.95rem;
+  color: var(--foreground);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
+}
+
+.field:focus {
+  outline: none;
+  border-color: rgba(35, 88, 71, 0.55);
+  box-shadow: 0 0 0 4px rgba(35, 88, 71, 0.08);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  border-radius: 999px;
+  background: var(--brand);
+  color: white;
+  padding: 0.9rem 1.2rem;
+  font-weight: 700;
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease,
+    box-shadow 120ms ease;
+  box-shadow: 0 14px 28px rgba(35, 88, 71, 0.22);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  transform: none;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.85rem 1.15rem;
+  font-weight: 600;
+  color: var(--foreground);
+  transition:
+    transform 120ms ease,
+    background 120ms ease;
+}
+
+.btn-secondary:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(35, 88, 71, 0.12);
+  background: rgba(255, 255, 255, 0.68);
+  padding: 0.4rem 0.7rem;
+  color: var(--ink-soft);
+}
+
+.divider {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
 }

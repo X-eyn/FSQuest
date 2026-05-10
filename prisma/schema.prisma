@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum ImportStatus {
+  UPLOADED
+  INDEXING
+  INDEXED
+  NEEDS_REVIEW
+  FAILED
+}
+
+enum ExamType {
+  CT1
+  CT2
+  CT3
+  CT4
+  FINAL_TERM
+}
+
+enum QuestionType {
+  MEMORIZATION
+  WORD_MEANING
+  SENTENCE_MAKING
+  FILL_IN_BLANK
+  ANTONYM
+  SHORT_ANSWER
+  ORAL_READING
+  MCQ
+}
+
+enum PaperReviewStatus {
+  DRAFT
+  APPROVED
+}
+
+model AppSetting {
+  id                 String   @id @default("default")
+  schoolName         String
+  schoolTagline      String?
+  defaultSubject     String
+  defaultExamMinutes Int      @default(40)
+  updatedAt          DateTime @updatedAt
+}
+
+model Book {
+  id               String       @id @default(cuid())
+  title            String
+  classLevel       String
+  subject          String
+  pdfFileName      String
+  pdfStoragePath   String
+  rawTextPath      String?
+  pageCount        Int          @default(0)
+  importStatus     ImportStatus @default(UPLOADED)
+  extractionMethod String?
+  notes            String?
+  indexedAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  chapters         Chapter[]
+  papers           GeneratedPaper[]
+}
+
+model Chapter {
+  id            String    @id @default(cuid())
+  bookId        String
+  title         String
+  sortOrder     Int
+  startPage     Int?
+  endPage       Int?
+  excerpt       String?
+  text          String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  book          Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  paperQuestions GeneratedQuestion[]
+
+  @@unique([bookId, sortOrder])
+}
+
+model ExamTemplate {
+  id              String    @id @default(cuid())
+  classLevel      String
+  examType        ExamType
+  displayName     String
+  totalMarks      Int
+  durationMinutes Int
+  instructions    String?
+  structureJson   String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  papers          GeneratedPaper[]
+
+  @@unique([classLevel, examType])
+}
+
+model GeneratedPaper {
+  id                 String              @id @default(cuid())
+  bookId             String
+  templateId         String?
+  classLevel         String
+  subject            String
+  examType           ExamType
+  title              String
+  totalMarks         Int
+  includedChapterIds String
+  allowReuse         Boolean             @default(false)
+  docxPath           String
+  reviewStatus       PaperReviewStatus   @default(DRAFT)
+  qualityReportJson  String?
+  approvedAt         DateTime?
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  book               Book                @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  template           ExamTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  questions          GeneratedQuestion[]
+}
+
+model GeneratedQuestion {
+  id             String        @id @default(cuid())
+  paperId        String
+  chapterId      String?
+  sectionKey     String
+  sectionTitle   String
+  itemOrder      Int
+  subLabel       String?
+  questionType   QuestionType
+  prompt         String
+  answerText     String?
+  marks          Float
+  sourceExcerpt  String?
+  metadataJson   String?
+  createdAt      DateTime      @default(now())
+  paper          GeneratedPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  chapter        Chapter?      @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+}

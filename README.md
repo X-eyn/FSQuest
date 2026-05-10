@@ -1,36 +1,98 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FSQuest
 
-## Getting Started
+FSQuest is a local-first web app for Bangla-medium primary teachers who need to create printable question papers without manually typing and formatting Bangla every time.
 
-First, run the development server:
+The product goal is teacher relief first: generate a useful draft, force review, then export only after approval.
+
+## What Works Now
+
+- Upload a Bangla textbook PDF or import the workspace sample.
+- OCR indexing uses Tesseract first, so imports do not depend on Gemini availability.
+- Optional AI OCR cleanup is bounded, text-only, and non-fatal; a 503 keeps the Tesseract output instead of breaking import.
+- Chapters can be reviewed and edited before question generation.
+- CT and Final Term blueprints can be edited from the dashboard.
+- Paper generation is deterministic by default and does not call Gemini unless explicitly enabled.
+- Generated papers become review drafts first.
+- Draft DOCX download is blocked until the paper is approved.
+- The review screen lets the teacher edit every prompt and teacher answer before export.
+- Quality gates block approval when prompts, answers, counts, marks, or OCR artifacts are unsafe.
+- Approved papers can be downloaded as DOCX for printing.
+
+## Stack
+
+- Next.js 16
+- React 19
+- Prisma Client 7
+- SQLite
+- Tesseract OCR
+- Optional Gemini OCR cleanup
+- `docx` for Word export
+
+## Commands
 
 ```bash
+npm install
+npm run db:push
+npm run db:generate
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Verification:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run lint
+npm run build
+npm run quality
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open:
 
-## Learn More
+- `http://localhost:3000`
 
-To learn more about Next.js, take a look at the following resources:
+## AI Controls
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Question generation is deterministic by default.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Set `FSQUEST_ENABLE_AI_QUESTIONS=true` only if you intentionally want Gemini-backed question generation.
+- Set `FSQUEST_OCR_MODE=gemini-image` only if you intentionally want image-level Gemini OCR.
+- Set `FSQUEST_OCR_AI_CLEANUP=off` to disable bounded text cleanup after Tesseract.
+- Set `FSQUEST_OCR_CLEANUP_PAGE_LIMIT=<number>` to cap cleanup pages.
 
-## Deploy on Vercel
+Default recommended mode:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Tesseract OCR first
+- bounded AI cleanup only for noisy page text
+- deterministic question generation
+- human review before export
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Safe Workflow
+
+1. Import or upload a textbook.
+2. Review chapter quality chips and fix bad chapter text if needed.
+3. Tune the exam blueprint if the school format changed.
+4. Generate a paper draft.
+5. Review every question and teacher answer in the review panel.
+6. Save edits as a draft until clean.
+7. Click `Approve & Export`.
+8. Download the approved DOCX.
+
+## Storage
+
+The app stores local data in:
+
+- `prisma/dev.db`
+- `storage/uploads/`
+- `storage/raw/`
+- `storage/generated/`
+- `storage/tessdata/`
+
+## Important Files
+
+- `src/lib/ocr.ts` - Tesseract-first OCR orchestration.
+- `scripts/ocr-cleanup-worker.mjs` - bounded, non-fatal text cleanup.
+- `src/lib/generator.ts` - deterministic question generation.
+- `src/lib/quality.ts` - paper/chapter quality gates.
+- `src/app/api/papers/route.ts` - draft paper generation.
+- `src/app/api/papers/[id]/route.ts` - save, approve, and rebuild paper drafts.
+- `src/app/api/templates/[id]/route.ts` - editable exam blueprint persistence.
+- `scripts/quality-check.mjs` - shipping sanity checks.
