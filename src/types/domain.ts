@@ -17,7 +17,8 @@ export type QuestionTypeValue =
   | "ANTONYM"
   | "SHORT_ANSWER"
   | "ORAL_READING"
-  | "MCQ";
+  | "MCQ"
+  | "MATCHING";
 
 export type SectionBlueprint = {
   id: string;

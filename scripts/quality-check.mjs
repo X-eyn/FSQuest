@@ -69,7 +69,7 @@ for (const paper of db
       !/[A-Za-z]{2,}|[0-9\u09E6-\u09EF]{6,}/u.test(question.prompt),
       `Approved paper ${paper.id} has OCR noise in a prompt`,
     );
-    if (["WORD_MEANING", "ANTONYM", "SHORT_ANSWER"].includes(question.questionType)) {
+    if (["WORD_MEANING", "ANTONYM", "SHORT_ANSWER", "MATCHING"].includes(question.questionType)) {
       assert(question.answerText, `Approved paper ${paper.id} is missing a teacher answer`);
     }
     if (question.questionType === "SHORT_ANSWER") {

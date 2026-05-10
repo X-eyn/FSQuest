@@ -234,6 +234,33 @@ function buildMcq(sentence: string, optionPool: string[]) {
   };
 }
 
+function buildMatchingPairCandidates(text: string, glossary: GlossaryEntry[]) {
+  const knownPairs: Array<[string, string]> = [
+    ["পিঁপড়া", "পিলপিল"],
+    ["মুরগি", "কক কক"],
+    ["ব্যাঙ", "ঘ্যাঙর ঘ্যাং"],
+    ["টানতে টানতে বলা", "হেইও"],
+    ["সিপাই", "সৈনিক"],
+    ["গুজব", "মিথ্যা তথ্য"],
+    ["রটানো", "ছড়ানো"],
+  ];
+  const candidates = [
+    ...knownPairs.filter(([left, right]) => text.includes(left) && text.includes(right)),
+    ...glossary.map((entry) => [entry.word, entry.meaning] as [string, string]),
+  ];
+  const seen = new Set<string>();
+
+  return candidates.filter(([left, right]) => {
+    const key = `${normalizeLooseKey(left)}:${normalizeLooseKey(right)}`;
+    if (!left.trim() || !right.trim() || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
 function extractReadingTitle(title: string) {
   return title.replace(/^পাঠ\s*[০-৯0-9]+[^—-]*[—-]\s*/u, "").trim() || title.trim();
 }
@@ -502,6 +529,8 @@ function getTypeSpecificGuidance(section: SectionBlueprint) {
       return "Prompt should tell the teacher what part the student will read aloud, usually the lesson title or a short passage label. answerText should be null.";
     case "MCQ":
       return "Each prompt must be a Bangla multiple-choice question. Also provide exactly 4 Bangla options in the options array and answerText must be the correct option text.";
+    case "MATCHING":
+      return "Each prompt should be the left-side Bangla item for a matching question, ending with a dash. answerText must contain the correct right-side match.";
     default:
       return "Keep the language simple, clear, and age-appropriate.";
   }
@@ -824,6 +853,10 @@ function generateQuestionDraftsFallback({
   const allGlossary = selectedChapters.flatMap(
     (chapter) => chapterAnalyses.get(chapter.id)?.glossary ?? [],
   );
+  const allMatchingPairs = selectedChapters.flatMap((chapter) => {
+    const analysis = chapterAnalyses.get(chapter.id) ?? analyzeChapter(chapter);
+    return buildMatchingPairCandidates(chapter.text, analysis.glossary);
+  });
   const allQuestionPrompts = selectedChapters.flatMap(
     (chapter) => chapterAnalyses.get(chapter.id)?.questionPrompts ?? [],
   );
@@ -1001,6 +1034,22 @@ function generateQuestionDraftsFallback({
           chapterId: chapter.id,
           sourceExcerpt: sentence ?? chapter.excerpt,
           metadataJson: mcq.metadataJson,
+        };
+      }
+
+      if (section.type === "MATCHING") {
+        const matchingPairs = buildMatchingPairCandidates(chapter.text, analysis.glossary);
+        const pair = matchingPairs[candidateIndex] ?? allMatchingPairs[candidateIndex];
+        if (!pair) {
+          continue;
+        }
+        question = {
+          ...sectionBase,
+          prompt: `${pair[0]} -`,
+          answerText: pair[1],
+          chapterId: chapter.id,
+          sourceExcerpt: `${pair[0]} - ${pair[1]}`,
+          metadataJson: null,
         };
       }
 

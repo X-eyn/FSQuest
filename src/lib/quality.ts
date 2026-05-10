@@ -226,7 +226,7 @@ function validateQuestionShape(question: QualityQuestion, issues: QualityIssue[]
   }
 
   if (
-    ["WORD_MEANING", "ANTONYM", "SHORT_ANSWER"].includes(question.questionType) &&
+    ["WORD_MEANING", "ANTONYM", "SHORT_ANSWER", "MATCHING"].includes(question.questionType) &&
     !question.answerText?.trim()
   ) {
     pushIssue(issues, {

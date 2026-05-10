@@ -1,34 +1,187 @@
 "use client";
 
+import type { DragEvent } from "react";
 import { useDeferredValue, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
   Download,
   FileText,
+  GripVertical,
   LoaderCircle,
+  Plus,
   RefreshCcw,
   Save,
   ScanText,
   Sparkles,
+  Trash2,
   Upload,
 } from "lucide-react";
 
 import { PaperStatusPill, StatusPill } from "@/components/status-pill";
 import { CLASS_LEVELS } from "@/lib/exam";
-import { formatAppDate, formatExamType, getSectionMarkSummary } from "@/lib/utils";
+import { formatAppDate, formatExamType, getSectionMarkSummary, toBanglaDigits } from "@/lib/utils";
 import type {
   DashboardData,
   ExamTypeValue,
   GeneratedPaperData,
   PaperQualityReport,
+  QuestionTypeValue,
   SectionBlueprint,
 } from "@/types/domain";
 
 const EXAM_TYPES: ExamTypeValue[] = ["CT1", "CT2", "CT3", "CT4", "FINAL_TERM"];
+const PALETTE_TRANSFER_TYPE = "application/x-fsquest-question-block";
+const SECTION_TRANSFER_TYPE = "application/x-fsquest-builder-section";
+
+type QuestionBlockDefinition = {
+  type: QuestionTypeValue;
+  label: string;
+  subtitle: string;
+  explanation: string;
+  defaultTitle: string;
+  defaultInstructions?: string;
+  defaultItemCount: number;
+  defaultMarksPerItem: number;
+};
+
+const QUESTION_BLOCKS: QuestionBlockDefinition[] = [
+  {
+    type: "WORD_MEANING",
+    label: "শব্দার্থ",
+    subtitle: "Word meaning",
+    explanation: "পাঠের শব্দ দিয়ে তার সহজ অর্থ লিখানো। যেমন: গুজব - মিথ্যা তথ্য।",
+    defaultTitle: "শব্দার্থ লেখ",
+    defaultItemCount: 4,
+    defaultMarksPerItem: 0.5,
+  },
+  {
+    type: "SENTENCE_MAKING",
+    label: "বাক্য গঠন",
+    subtitle: "Make sentence",
+    explanation: "একটি শব্দ দিয়ে ছাত্র/ছাত্রী নিজের বাক্য লিখবে।",
+    defaultTitle: "বাক্য গঠন কর",
+    defaultItemCount: 2,
+    defaultMarksPerItem: 1,
+  },
+  {
+    type: "FILL_IN_BLANK",
+    label: "শূন্যস্থান পূরণ",
+    subtitle: "Fill in the blank",
+    explanation: "একটি বাক্যের গুরুত্বপূর্ণ শব্দ ফাঁকা রেখে উত্তর লিখানো।",
+    defaultTitle: "খালি ঘরের শব্দটি লেখ",
+    defaultInstructions: "শুদ্ধ উত্তর লেখ।",
+    defaultItemCount: 2,
+    defaultMarksPerItem: 1,
+  },
+  {
+    type: "SHORT_ANSWER",
+    label: "প্রশ্নোত্তর",
+    subtitle: "Short answer",
+    explanation: "পাঠ থেকে সরাসরি ছোট প্রশ্ন, সঙ্গে শিক্ষক উত্তর।",
+    defaultTitle: "নিচের প্রশ্নগুলোর উত্তর লেখ",
+    defaultItemCount: 2,
+    defaultMarksPerItem: 1,
+  },
+  {
+    type: "MCQ",
+    label: "সঠিক উত্তর",
+    subtitle: "MCQ",
+    explanation: "চারটি অপশন থেকে সঠিক উত্তর বাছাই।",
+    defaultTitle: "সঠিক উত্তরটি বেছে লেখ",
+    defaultItemCount: 4,
+    defaultMarksPerItem: 1,
+  },
+  {
+    type: "MATCHING",
+    label: "মিল করো",
+    subtitle: "Matching",
+    explanation: "বাম পাশের শব্দ/ধ্বনির সঙ্গে ডান পাশের সঠিক মিল বসানো।",
+    defaultTitle: "ডান পাশ থেকে শব্দ এনে বাম পাশে বসাই",
+    defaultItemCount: 4,
+    defaultMarksPerItem: 0.5,
+  },
+  {
+    type: "ANTONYM",
+    label: "বিপরীত শব্দ",
+    subtitle: "Opposite word",
+    explanation: "একটি শব্দের বিপরীত অর্থের শব্দ লিখানো।",
+    defaultTitle: "বিপরীত শব্দ লেখ",
+    defaultItemCount: 2,
+    defaultMarksPerItem: 0.5,
+  },
+  {
+    type: "MEMORIZATION",
+    label: "মুখস্থ অংশ",
+    subtitle: "Memorization",
+    explanation: "নির্দিষ্ট পাঠ/অংশ থেকে মুখস্থ লেখা।",
+    defaultTitle: "মুখস্থ অংশ লেখ",
+    defaultInstructions: "নির্বাচিত পাঠ থেকে মুখস্থ অংশ শুদ্ধভাবে লেখ।",
+    defaultItemCount: 1,
+    defaultMarksPerItem: 5,
+  },
+  {
+    type: "ORAL_READING",
+    label: "স্বরব পাঠ",
+    subtitle: "Oral reading",
+    explanation: "শিক্ষক শুনে পাঠ/উচ্চারণের নম্বর দেবেন।",
+    defaultTitle: "স্বরব পাঠ",
+    defaultItemCount: 1,
+    defaultMarksPerItem: 5,
+  },
+];
 
 function getPreferredBookId(books: DashboardData["books"]) {
   return books.find((book) => book.importStatus === "INDEXED")?.id ?? books[0]?.id ?? "";
+}
+
+function getQuestionBlock(type: QuestionTypeValue) {
+  return QUESTION_BLOCKS.find((block) => block.type === type) ?? QUESTION_BLOCKS[0];
+}
+
+function makeSectionId(type: QuestionTypeValue, index: number) {
+  return `${type.toLowerCase().replaceAll("_", "-")}-${Date.now().toString(36)}-${index}`;
+}
+
+function createSectionFromBlock(
+  block: QuestionBlockDefinition,
+  index: number,
+): SectionBlueprint {
+  return {
+    id: makeSectionId(block.type, index),
+    type: block.type,
+    title: block.defaultTitle,
+    instructions: block.defaultInstructions,
+    itemCount: block.defaultItemCount,
+    marksPerItem: block.defaultMarksPerItem,
+  };
+}
+
+function getSectionTotal(section: SectionBlueprint) {
+  if (section.marksPattern?.length) {
+    return section.marksPattern.reduce((sum, mark) => sum + mark, 0);
+  }
+
+  return (section.marksPerItem ?? 0) * section.itemCount;
+}
+
+function getStructureTotal(structure: SectionBlueprint[]) {
+  return structure.reduce((sum, section) => sum + getSectionTotal(section), 0);
+}
+
+function reorderSections(
+  structure: SectionBlueprint[],
+  fromIndex: number,
+  toIndex: number,
+) {
+  const next = [...structure];
+  const [moved] = next.splice(fromIndex, 1);
+  if (!moved) {
+    return structure;
+  }
+
+  next.splice(toIndex, 0, moved);
+  return next;
 }
 
 type TemplateDraft = {
@@ -65,6 +218,7 @@ export function DashboardClient({
     Record<string, { prompt: string; answerText: string }>
   >({});
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, TemplateDraft>>({});
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
 
   const deferredBooks = useDeferredValue(initialData.books);
   const resolvedSelectedBookId = deferredBooks.some(
@@ -130,6 +284,13 @@ export function DashboardClient({
         structure: matchingTemplate.structure,
       }
     : null;
+  const builderUsedMarks = templateDraft
+    ? getStructureTotal(templateDraft.structure)
+    : 0;
+  const builderRemainingMarks = templateDraft
+    ? templateDraft.totalMarks - builderUsedMarks
+    : 0;
+  const builderMarksReady = Math.abs(builderRemainingMarks) < 0.001;
 
   function refreshView() {
     startTransition(() => {
@@ -169,6 +330,127 @@ export function DashboardClient({
     }));
   }
 
+  function addBuilderBlock(type: QuestionTypeValue, insertIndex?: number) {
+    const block = getQuestionBlock(type);
+    updateTemplateDraft((draft) => {
+      const nextStructure = [...draft.structure];
+      const targetIndex = insertIndex ?? nextStructure.length;
+      nextStructure.splice(
+        targetIndex,
+        0,
+        createSectionFromBlock(block, nextStructure.length + 1),
+      );
+      return {
+        ...draft,
+        structure: nextStructure,
+      };
+    });
+  }
+
+  function duplicateBuilderSection(section: SectionBlueprint, index: number) {
+    updateTemplateDraft((draft) => {
+      const nextStructure = [...draft.structure];
+      nextStructure.splice(index + 1, 0, {
+        ...section,
+        id: makeSectionId(section.type, index + 1),
+        title: `${section.title} copy`,
+      });
+      return {
+        ...draft,
+        structure: nextStructure,
+      };
+    });
+  }
+
+  function removeBuilderSection(sectionIndex: number) {
+    updateTemplateDraft((draft) => ({
+      ...draft,
+      structure: draft.structure.filter((_section, index) => index !== sectionIndex),
+    }));
+  }
+
+  function moveBuilderSection(sectionIndex: number, direction: -1 | 1) {
+    updateTemplateDraft((draft) => {
+      const targetIndex = sectionIndex + direction;
+      if (targetIndex < 0 || targetIndex >= draft.structure.length) {
+        return draft;
+      }
+
+      return {
+        ...draft,
+        structure: reorderSections(draft.structure, sectionIndex, targetIndex),
+      };
+    });
+  }
+
+  function handlePaletteDragStart(
+    event: DragEvent<HTMLButtonElement>,
+    type: QuestionTypeValue,
+  ) {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData(PALETTE_TRANSFER_TYPE, type);
+  }
+
+  function handleSectionDragStart(
+    event: DragEvent<HTMLDivElement>,
+    sectionId: string,
+  ) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(SECTION_TRANSFER_TYPE, sectionId);
+  }
+
+  function handleBuilderDrop(event: DragEvent<HTMLDivElement>, dropIndex: number) {
+    event.preventDefault();
+    setDropTargetIndex(null);
+
+    const blockType = event.dataTransfer.getData(PALETTE_TRANSFER_TYPE) as
+      | QuestionTypeValue
+      | "";
+    if (blockType) {
+      addBuilderBlock(blockType, dropIndex);
+      return;
+    }
+
+    const sectionId = event.dataTransfer.getData(SECTION_TRANSFER_TYPE);
+    if (!sectionId || !templateDraft) {
+      return;
+    }
+
+    const fromIndex = templateDraft.structure.findIndex(
+      (section) => section.id === sectionId,
+    );
+    if (fromIndex < 0 || fromIndex === dropIndex) {
+      return;
+    }
+
+    updateTemplateDraft((draft) => ({
+      ...draft,
+      structure: reorderSections(
+        draft.structure,
+        fromIndex,
+        fromIndex < dropIndex ? dropIndex - 1 : dropIndex,
+      ),
+    }));
+  }
+
+  async function persistTemplateDraft() {
+    if (!matchingTemplate || !templateDraft) {
+      throw new Error("No exam blueprint is selected.");
+    }
+
+    const response = await fetch(`/api/templates/${matchingTemplate.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(templateDraft),
+    });
+    const payload = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Could not save the blueprint.");
+    }
+  }
+
   async function saveTemplateDraft() {
     if (!matchingTemplate || !templateDraft) {
       return;
@@ -178,18 +460,7 @@ export function DashboardClient({
     setNotice(null);
 
     try {
-      const response = await fetch(`/api/templates/${matchingTemplate.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(templateDraft),
-      });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not save the blueprint.");
-      }
-
+      await persistTemplateDraft();
       setNotice("Exam blueprint saved.");
       refreshView();
     } catch (error) {
@@ -402,10 +673,23 @@ export function DashboardClient({
       return;
     }
 
-    setBusyMessage("Generating the question paper and preparing the DOCX file.");
+    if (templateDraft && !builderMarksReady) {
+      setNotice(
+        builderRemainingMarks > 0
+          ? `${toBanglaDigits(builderRemainingMarks)} marks still need to be added before generating.`
+          : `${toBanglaDigits(Math.abs(builderRemainingMarks))} marks must be removed before generating.`,
+      );
+      return;
+    }
+
+    setBusyMessage("Saving the builder and generating the question paper.");
     setNotice(null);
 
     try {
+      if (matchingTemplate && templateDraft) {
+        await persistTemplateDraft();
+      }
+
       const response = await fetch("/api/papers", {
         method: "POST",
         headers: {
@@ -655,14 +939,40 @@ export function DashboardClient({
         )}
 
         <div className="card rounded-[1.75rem] p-6">
-          <div className="flex items-center gap-3">
-            <FileText size={18} className="text-[var(--brand)]" />
-            <h2 className="section-title text-2xl font-bold">Exam Blueprint</h2>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <FileText size={18} className="text-[var(--brand)]" />
+                <h2 className="section-title text-2xl font-bold">Question Builder</h2>
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-[var(--ink-soft)]">
+                Drag Bangla question blocks into the paper, tune the marks, and
+                keep the total locked before generating.
+              </p>
+            </div>
+            {templateDraft && (
+              <div className="rounded-3xl border border-[var(--line)] bg-white/80 px-4 py-3 text-sm">
+                <div className="mono text-xs uppercase tracking-[0.18em] text-[var(--ink-soft)]">
+                  Mark balance
+                </div>
+                <div className="mt-1 font-bold">
+                  {toBanglaDigits(builderUsedMarks)} /{" "}
+                  {toBanglaDigits(templateDraft.totalMarks)}
+                </div>
+                <div
+                  className={`mt-1 text-xs font-semibold ${
+                    builderMarksReady ? "text-emerald-700" : "text-amber-800"
+                  }`}
+                >
+                  {builderMarksReady
+                    ? "Ready to generate"
+                    : builderRemainingMarks > 0
+                      ? `${toBanglaDigits(builderRemainingMarks)} marks left`
+                      : `${toBanglaDigits(Math.abs(builderRemainingMarks))} marks over`}
+                </div>
+              </div>
+            )}
           </div>
-          <p className="mt-2 text-sm leading-7 text-[var(--ink-soft)]">
-            Tune this to match your mother&apos;s exact school format. The app
-            blocks saving if the section marks do not add up correctly.
-          </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {EXAM_TYPES.map((examType) => (
               <button
@@ -679,7 +989,7 @@ export function DashboardClient({
               </button>
             ))}
           </div>
-          <div className="mt-5 space-y-3">
+          <div className="mt-5 space-y-4">
             {!matchingTemplate && (
               <div className="rounded-3xl border border-dashed border-[var(--line)] px-4 py-5 text-sm text-[var(--ink-soft)]">
                 No template found for this class and exam type yet.
@@ -687,7 +997,7 @@ export function DashboardClient({
             )}
             {matchingTemplate && templateDraft && (
               <>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-[0.8fr_0.8fr_1.4fr]">
                   <label className="text-sm font-semibold text-[var(--ink-soft)]">
                     Total Marks
                     <input
@@ -704,7 +1014,7 @@ export function DashboardClient({
                     />
                   </label>
                   <label className="text-sm font-semibold text-[var(--ink-soft)]">
-                    Duration Minutes
+                    Time Minutes
                     <input
                       className="field mt-2"
                       type="number"
@@ -719,105 +1029,297 @@ export function DashboardClient({
                       }
                     />
                   </label>
+                  <label className="text-sm font-semibold text-[var(--ink-soft)]">
+                    Paper Instructions
+                    <textarea
+                      className="field mt-2 min-h-16"
+                      value={templateDraft.instructions}
+                      onChange={(event) =>
+                        updateTemplateDraft((draft) => ({
+                          ...draft,
+                          instructions: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
                 </div>
-                <label className="block text-sm font-semibold text-[var(--ink-soft)]">
-                  Instructions
-                  <textarea
-                    className="field mt-2 min-h-20"
-                    value={templateDraft.instructions}
-                    onChange={(event) =>
-                      updateTemplateDraft((draft) => ({
-                        ...draft,
-                        instructions: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                {templateDraft.structure.map((section, sectionIndex) => (
+
+                <div className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr]">
+                  <div className="rounded-[1.5rem] border border-[var(--line)] bg-white/65 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold">Question blocks</div>
+                        <p className="text-xs leading-5 text-[var(--ink-soft)]">
+                          Drag into the paper, or click plus.
+                        </p>
+                      </div>
+                      <Plus size={17} className="text-[var(--brand)]" />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                      {QUESTION_BLOCKS.map((block) => (
+                        <button
+                          key={block.type}
+                          type="button"
+                          draggable
+                          onDragStart={(event) =>
+                            handlePaletteDragStart(event, block.type)
+                          }
+                          onClick={() => addBuilderBlock(block.type)}
+                          className="group rounded-3xl border border-[var(--line)] bg-white/80 p-4 text-left transition hover:-translate-y-0.5 hover:border-[var(--brand)] hover:shadow-lg"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-bold">{block.label}</div>
+                              <div className="mt-1 text-xs uppercase tracking-[0.12em] text-[var(--ink-soft)]">
+                                {block.subtitle}
+                              </div>
+                            </div>
+                            <span className="rounded-full bg-[var(--wash)] px-2 py-1 text-xs font-bold text-[var(--brand)]">
+                              + Add
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-[var(--ink-soft)]">
+                            {block.explanation}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div
-                    key={section.id}
-                    className="rounded-3xl border border-[var(--line)] bg-white/70 px-4 py-4"
+                    className="rounded-[1.5rem] border border-[var(--line)] bg-[linear-gradient(180deg,rgba(255,255,255,.82),rgba(255,250,239,.76))] p-4"
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      setDropTargetIndex(templateDraft.structure.length);
+                    }}
+                    onDrop={(event) =>
+                      handleBuilderDrop(event, templateDraft.structure.length)
+                    }
+                    onDragLeave={() => setDropTargetIndex(null)}
                   >
-                    <div className="flex items-center justify-between gap-4">
-                      <input
-                        className="field !py-2 font-semibold"
-                        value={section.title}
-                        onChange={(event) =>
-                          updateTemplateSection(sectionIndex, (current) => ({
-                            ...current,
-                            title: event.target.value,
-                          }))
-                        }
-                      />
-                      <div className="mono shrink-0 text-xs text-[var(--ink-soft)]">
-                        {getSectionMarkSummary(section)}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="text-sm font-bold">Paper canvas</div>
+                        <p className="text-xs leading-5 text-[var(--ink-soft)]">
+                          Drag to reorder. The mark meter updates instantly.
+                        </p>
+                      </div>
+                      <div
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          builderMarksReady
+                            ? "bg-emerald-50 text-emerald-800"
+                            : "bg-amber-50 text-amber-800"
+                        }`}
+                      >
+                        {builderMarksReady ? "Balanced" : "Needs mark fix"}
                       </div>
                     </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <label className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ink-soft)]">
-                        Items
-                        <input
-                          className="field mt-2 !py-2"
-                          type="number"
-                          min={1}
-                          value={section.itemCount}
-                          onChange={(event) =>
-                            updateTemplateSection(sectionIndex, (current) => ({
-                              ...current,
-                              itemCount: Number(event.target.value) || current.itemCount,
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ink-soft)]">
-                        {section.marksPattern ? "Marks Pattern" : "Marks Each"}
-                        <input
-                          className="field mt-2 !py-2"
-                          value={
-                            section.marksPattern?.join(", ") ??
-                            String(section.marksPerItem ?? 1)
-                          }
-                          onChange={(event) =>
-                            updateTemplateSection(sectionIndex, (current) => {
-                              if (current.marksPattern) {
-                                return {
-                                  ...current,
-                                  marksPattern: event.target.value
-                                    .split(/[, ]+/)
-                                    .map((item) => Number(item))
-                                    .filter((item) => item > 0),
-                                  marksPerItem: undefined,
-                                };
-                              }
 
-                              return {
-                                ...current,
-                                marksPerItem:
-                                  Number(event.target.value) ||
-                                  current.marksPerItem ||
-                                  1,
-                              };
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                    {section.instructions && (
-                      <p className="mt-2 text-sm text-[var(--ink-soft)]">
-                        {section.instructions}
-                      </p>
+                    {templateDraft.structure.length === 0 && (
+                      <div className="mt-4 rounded-3xl border border-dashed border-[var(--line-strong)] bg-white/55 px-4 py-10 text-center text-sm text-[var(--ink-soft)]">
+                        Drop question blocks here to start the paper.
+                      </div>
                     )}
+
+                    <div className="mt-4 space-y-3">
+                      {templateDraft.structure.map((section, sectionIndex) => {
+                        const block = getQuestionBlock(section.type);
+                        return (
+                          <div key={section.id}>
+                            <div
+                              className={`h-3 rounded-full transition ${
+                                dropTargetIndex === sectionIndex
+                                  ? "bg-[var(--brand)]/25"
+                                  : "bg-transparent"
+                              }`}
+                              onDragOver={(event) => {
+                                event.preventDefault();
+                                setDropTargetIndex(sectionIndex);
+                              }}
+                              onDrop={(event) => handleBuilderDrop(event, sectionIndex)}
+                            />
+                            <div
+                              draggable
+                              onDragStart={(event) =>
+                                handleSectionDragStart(event, section.id)
+                              }
+                              className="rounded-3xl border border-[var(--line)] bg-white/90 p-4 shadow-sm transition hover:shadow-lg"
+                            >
+                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="flex min-w-0 items-start gap-3">
+                                  <GripVertical
+                                    className="mt-2 shrink-0 text-[var(--ink-soft)]"
+                                    size={18}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="rounded-full bg-[var(--wash)] px-3 py-1 text-xs font-bold text-[var(--brand)]">
+                                        {block.label}
+                                      </span>
+                                      <span className="mono text-xs text-[var(--ink-soft)]">
+                                        {getSectionMarkSummary(section)}
+                                      </span>
+                                    </div>
+                                    <input
+                                      className="field mt-3 !py-2 font-semibold"
+                                      value={section.title}
+                                      onChange={(event) =>
+                                        updateTemplateSection(sectionIndex, (current) => ({
+                                          ...current,
+                                          title: event.target.value,
+                                        }))
+                                      }
+                                    />
+                                    <p className="mt-2 text-xs leading-5 text-[var(--ink-soft)]">
+                                      {block.explanation}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    className="btn-secondary !px-3 !py-2 text-xs"
+                                    onClick={() => moveBuilderSection(sectionIndex, -1)}
+                                    disabled={sectionIndex === 0}
+                                  >
+                                    Up
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary !px-3 !py-2 text-xs"
+                                    onClick={() => moveBuilderSection(sectionIndex, 1)}
+                                    disabled={
+                                      sectionIndex === templateDraft.structure.length - 1
+                                    }
+                                  >
+                                    Down
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary !px-3 !py-2 text-xs"
+                                    onClick={() =>
+                                      duplicateBuilderSection(section, sectionIndex)
+                                    }
+                                  >
+                                    Copy
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary !px-3 !py-2 text-xs"
+                                    onClick={() => removeBuilderSection(sectionIndex)}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                                <label className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ink-soft)]">
+                                  Items
+                                  <input
+                                    className="field mt-2 !py-2"
+                                    type="number"
+                                    min={1}
+                                    value={section.itemCount}
+                                    onChange={(event) =>
+                                      updateTemplateSection(sectionIndex, (current) => ({
+                                        ...current,
+                                        itemCount:
+                                          Number(event.target.value) ||
+                                          current.itemCount,
+                                      }))
+                                    }
+                                  />
+                                </label>
+                                <label className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ink-soft)]">
+                                  {section.marksPattern ? "Marks Pattern" : "Marks Each"}
+                                  <input
+                                    className="field mt-2 !py-2"
+                                    value={
+                                      section.marksPattern?.join(", ") ??
+                                      String(section.marksPerItem ?? 1)
+                                    }
+                                    onChange={(event) =>
+                                      updateTemplateSection(sectionIndex, (current) => {
+                                        if (current.marksPattern) {
+                                          const marksPattern = event.target.value
+                                            .split(/[, ]+/)
+                                            .map((item) => Number(item))
+                                            .filter((item) => item > 0);
+                                          return {
+                                            ...current,
+                                            itemCount:
+                                              marksPattern.length || current.itemCount,
+                                            marksPattern,
+                                            marksPerItem: undefined,
+                                          };
+                                        }
+
+                                        return {
+                                          ...current,
+                                          marksPerItem:
+                                            Number(event.target.value) ||
+                                            current.marksPerItem ||
+                                            1,
+                                        };
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ink-soft)]">
+                                  Instructions
+                                  <input
+                                    className="field mt-2 !py-2"
+                                    value={section.instructions ?? ""}
+                                    onChange={(event) =>
+                                      updateTemplateSection(sectionIndex, (current) => ({
+                                        ...current,
+                                        instructions: event.target.value || undefined,
+                                      }))
+                                    }
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div
+                        className={`rounded-3xl border border-dashed px-4 py-5 text-center text-sm transition ${
+                          dropTargetIndex === templateDraft.structure.length
+                            ? "border-[var(--brand)] bg-[var(--wash)] text-[var(--brand)]"
+                            : "border-[var(--line)] text-[var(--ink-soft)]"
+                        }`}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          setDropTargetIndex(templateDraft.structure.length);
+                        }}
+                        onDrop={(event) =>
+                          handleBuilderDrop(event, templateDraft.structure.length)
+                        }
+                      >
+                        Drop here to add at the end
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={Boolean(busyMessage) || !builderMarksReady}
+                        onClick={saveTemplateDraft}
+                      >
+                        <Save size={16} />
+                        Save Builder
+                      </button>
+                      {!builderMarksReady && (
+                        <p className="text-sm leading-7 text-[var(--ink-soft)]">
+                          Match the block marks to the total before saving or generating.
+                        </p>
+                      )}
+                    </div>
                   </div>
-                ))}
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  disabled={Boolean(busyMessage)}
-                  onClick={saveTemplateDraft}
-                >
-                  <Save size={16} />
-                  Save Blueprint
-                </button>
+                </div>
               </>
             )}
           </div>
@@ -980,7 +1482,8 @@ export function DashboardClient({
                   disabled={
                     Boolean(busyMessage) ||
                     activeBook.importStatus === "FAILED" ||
-                    activeBook.importStatus === "INDEXING"
+                    activeBook.importStatus === "INDEXING" ||
+                    !builderMarksReady
                   }
                 >
                   <Sparkles size={16} />

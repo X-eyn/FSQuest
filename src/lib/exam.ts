@@ -22,6 +22,7 @@ export const QUESTION_TYPE_LABELS: Record<QuestionTypeValue, string> = {
   SHORT_ANSWER: "সংক্ষিপ্ত প্রশ্নোত্তর",
   ORAL_READING: "স্বরব পাঠ",
   MCQ: "বহুনির্বাচনি",
+  MATCHING: "মিল করো",
 };
 
 export const sectionBlueprintSchema = z.object({
@@ -35,6 +36,7 @@ export const sectionBlueprintSchema = z.object({
     "SHORT_ANSWER",
     "ORAL_READING",
     "MCQ",
+    "MATCHING",
   ]),
   title: z.string(),
   instructions: z.string().optional(),
