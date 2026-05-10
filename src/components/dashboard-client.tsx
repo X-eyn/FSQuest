@@ -135,6 +135,23 @@ function getPreferredBookId(books: DashboardData["books"]) {
   return books.find((book) => book.importStatus === "INDEXED")?.id ?? books[0]?.id ?? "";
 }
 
+function formatMomExamType(examType: ExamTypeValue) {
+  switch (examType) {
+    case "CT1":
+      return "সিটি ১";
+    case "CT2":
+      return "সিটি ২";
+    case "CT3":
+      return "সিটি ৩";
+    case "CT4":
+      return "সিটি ৪";
+    case "FINAL_TERM":
+      return "ফাইনাল";
+    default:
+      return formatExamType(examType);
+  }
+}
+
 function getQuestionBlock(type: QuestionTypeValue) {
   return QUESTION_BLOCKS.find((block) => block.type === type) ?? QUESTION_BLOCKS[0];
 }
@@ -238,6 +255,7 @@ export function DashboardClient({
     deferredBooks.length === 1 &&
     activeBook?.importStatus === "INDEXED" &&
     activeBook.chapters.length === 1;
+  const focusedChapter = focusedSingleChapterMode ? activeBook?.chapters[0] : null;
 
   const matchingTemplate = useMemo(
     () =>
@@ -381,6 +399,36 @@ export function DashboardClient({
         structure: reorderSections(draft.structure, sectionIndex, targetIndex),
       };
     });
+  }
+
+  function changeBuilderItemCount(sectionIndex: number, nextCount: number) {
+    updateTemplateSection(sectionIndex, (current) => {
+      const itemCount = Math.max(1, Math.round(nextCount));
+      if (current.marksPattern) {
+        const fallbackMark = current.marksPattern.at(-1) ?? 1;
+        return {
+          ...current,
+          itemCount,
+          marksPattern: Array.from(
+            { length: itemCount },
+            (_item, index) => current.marksPattern?.[index] ?? fallbackMark,
+          ),
+        };
+      }
+
+      return {
+        ...current,
+        itemCount,
+      };
+    });
+  }
+
+  function changeBuilderMarks(sectionIndex: number, nextMark: number) {
+    updateTemplateSection(sectionIndex, (current) => ({
+      ...current,
+      marksPattern: undefined,
+      marksPerItem: Math.max(0.5, Number(nextMark.toFixed(1))),
+    }));
   }
 
   function handlePaletteDragStart(
@@ -723,6 +771,489 @@ export function DashboardClient({
     } finally {
       setBusyMessage(null);
     }
+  }
+
+  if (focusedSingleChapterMode && activeBook && focusedChapter && templateDraft) {
+    return (
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-3 pb-28 pt-3 md:px-6 md:py-6">
+        <section className="overflow-hidden rounded-[2rem] border border-[var(--line)] bg-[linear-gradient(135deg,#fffaf0_0%,#f8ead6_48%,#e6f0e7_100%)] p-5 shadow-[0_24px_80px_rgba(35,88,71,.16)] md:p-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="mb-3 inline-flex rounded-full bg-white/75 px-4 py-2 text-sm font-bold text-[var(--brand)]">
+                FSQuest · সহজ প্রশ্নপত্র বানানো
+              </div>
+              <h1 className="text-4xl font-black tracking-tight text-[var(--foreground)] md:text-6xl">
+                প্রশ্নপত্র বানাই
+              </h1>
+              <p className="mt-3 text-xl font-semibold text-[var(--foreground)] md:text-2xl">
+                {focusedChapter.title}
+              </p>
+              <p className="mt-1 text-base text-[var(--ink-soft)] md:text-lg">
+                পৃষ্ঠা {toBanglaDigits(focusedChapter.startPage ?? "?")} -{" "}
+                {toBanglaDigits(focusedChapter.endPage ?? "?")} · পাঠ প্রস্তুত ·
+                মান {toBanglaDigits(focusedChapter.quality.score)}/১০০
+              </p>
+            </div>
+            <div className="rounded-[1.75rem] bg-white/85 p-5 shadow-lg">
+              <div className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--ink-soft)]">
+                নম্বর মিল
+              </div>
+              <div className="mt-2 text-5xl font-black text-[var(--brand)]">
+                {toBanglaDigits(builderUsedMarks)} /{" "}
+                {toBanglaDigits(templateDraft.totalMarks)}
+              </div>
+              <div
+                className={`mt-2 text-lg font-bold ${
+                  builderMarksReady ? "text-emerald-700" : "text-amber-800"
+                }`}
+              >
+                {builderMarksReady
+                  ? "ঠিক আছে, বানানো যাবে"
+                  : builderRemainingMarks > 0
+                    ? `আর ${toBanglaDigits(builderRemainingMarks)} নম্বর বাকি`
+                    : `${toBanglaDigits(Math.abs(builderRemainingMarks))} নম্বর বেশি`}
+              </div>
+            </div>
+          </div>
+          {(busyMessage || notice || isPending) && (
+            <div className="mt-5 rounded-3xl border border-[var(--line)] bg-white/85 px-5 py-4 text-lg leading-8">
+              <div className="flex gap-3">
+                {(busyMessage || isPending) && (
+                  <LoaderCircle
+                    className="mt-1 shrink-0 animate-spin text-[var(--brand)]"
+                    size={22}
+                  />
+                )}
+                <div>
+                  {busyMessage && <p className="font-bold">{busyMessage}</p>}
+                  {notice && (
+                    <p className={busyMessage ? "mt-1 text-[var(--ink-soft)]" : ""}>
+                      {notice}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)_280px]">
+          <aside className="space-y-5">
+            <div className="rounded-[2rem] border border-[var(--line)] bg-white/88 p-5 shadow-lg">
+              <div className="mb-3 flex items-center gap-3">
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand)] text-lg font-black text-white">
+                  ১
+                </span>
+                <h2 className="text-2xl font-black">পরীক্ষা</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {EXAM_TYPES.map((examType) => (
+                  <button
+                    key={examType}
+                    type="button"
+                    className={`rounded-2xl px-4 py-4 text-lg font-black transition ${
+                      selectedExamType === examType
+                        ? "bg-[var(--brand)] text-white shadow-lg"
+                        : "bg-[#f6efe2] text-[var(--foreground)] hover:bg-white"
+                    }`}
+                    onClick={() => setSelectedExamType(examType)}
+                  >
+                    {formatMomExamType(examType)}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <label className="text-sm font-bold text-[var(--ink-soft)]">
+                  মোট নম্বর
+                  <input
+                    className="field mt-2 text-center text-2xl font-black"
+                    type="number"
+                    min={1}
+                    value={templateDraft.totalMarks}
+                    onChange={(event) =>
+                      updateTemplateDraft((draft) => ({
+                        ...draft,
+                        totalMarks: Number(event.target.value) || draft.totalMarks,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="text-sm font-bold text-[var(--ink-soft)]">
+                  সময়
+                  <input
+                    className="field mt-2 text-center text-2xl font-black"
+                    type="number"
+                    min={1}
+                    value={templateDraft.durationMinutes}
+                    onChange={(event) =>
+                      updateTemplateDraft((draft) => ({
+                        ...draft,
+                        durationMinutes:
+                          Number(event.target.value) || draft.durationMinutes,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-[var(--line)] bg-white/88 p-5 shadow-lg">
+              <div className="mb-3 flex items-center gap-3">
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--accent)] text-lg font-black text-white">
+                  ২
+                </span>
+                <h2 className="text-2xl font-black">প্রশ্ন যোগ</h2>
+              </div>
+              <p className="mb-4 text-base leading-7 text-[var(--ink-soft)]">
+                যে ধরন লাগবে, শুধু চাপ দিন। টেনে নেওয়াও যাবে, কিন্তু দরকার নেই।
+              </p>
+              <div className="space-y-3">
+                {QUESTION_BLOCKS.map((block) => (
+                  <button
+                    key={block.type}
+                    type="button"
+                    draggable
+                    onDragStart={(event) => handlePaletteDragStart(event, block.type)}
+                    onClick={() => addBuilderBlock(block.type)}
+                    className="w-full rounded-[1.5rem] border-2 border-transparent bg-[#fff7ea] p-4 text-left shadow-sm transition hover:border-[var(--brand)] hover:bg-white hover:shadow-lg"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xl font-black">{block.label}</div>
+                        <div className="mt-1 text-sm text-[var(--ink-soft)]">
+                          {block.explanation}
+                        </div>
+                      </div>
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-2xl font-black text-white">
+                        +
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </aside>
+
+          <main className="rounded-[2rem] border border-[var(--line)] bg-white/92 p-4 shadow-xl md:p-6">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="flex items-center gap-3">
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand)] text-lg font-black text-white">
+                    ৩
+                  </span>
+                  <h2 className="text-3xl font-black">প্রশ্নপত্রের সাজানো</h2>
+                </div>
+                <p className="mt-2 text-base text-[var(--ink-soft)]">
+                  উপরে-নিচে করুন, সংখ্যা বদলান, নম্বর মিলিয়ে নিন।
+                </p>
+              </div>
+              <div
+                className={`rounded-2xl px-4 py-3 text-center font-black ${
+                  builderMarksReady
+                    ? "bg-emerald-50 text-emerald-800"
+                    : "bg-amber-50 text-amber-900"
+                }`}
+              >
+                {builderMarksReady ? "নম্বর ঠিক" : "নম্বর ঠিক নয়"}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {templateDraft.structure.map((section, sectionIndex) => {
+                const block = getQuestionBlock(section.type);
+                const marksEach = section.marksPerItem ?? section.marksPattern?.[0] ?? 1;
+                return (
+                  <div
+                    key={section.id}
+                    draggable
+                    onDragStart={(event) => handleSectionDragStart(event, section.id)}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      setDropTargetIndex(sectionIndex);
+                    }}
+                    onDrop={(event) => handleBuilderDrop(event, sectionIndex)}
+                    className={`rounded-[1.75rem] border-2 p-4 shadow-sm transition ${
+                      dropTargetIndex === sectionIndex
+                        ? "border-[var(--brand)] bg-[#f1f8ef]"
+                        : "border-[var(--line)] bg-[#fffaf2]"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-[var(--brand)] px-4 py-1.5 text-lg font-black text-white">
+                            {block.label}
+                          </span>
+                          <span className="rounded-full bg-white px-3 py-1.5 text-base font-bold text-[var(--ink-soft)]">
+                            {getSectionMarkSummary(section)}
+                          </span>
+                        </div>
+                        <input
+                          className="field mt-3 text-xl font-black"
+                          value={section.title}
+                          onChange={(event) =>
+                            updateTemplateSection(sectionIndex, (current) => ({
+                              ...current,
+                              title: event.target.value,
+                            }))
+                          }
+                        />
+                        <p className="mt-2 text-base leading-7 text-[var(--ink-soft)]">
+                          {block.explanation}
+                        </p>
+                      </div>
+
+                      <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
+                        <button
+                          type="button"
+                          className="rounded-2xl bg-white px-4 py-3 font-black shadow-sm disabled:opacity-40"
+                          onClick={() => moveBuilderSection(sectionIndex, -1)}
+                          disabled={sectionIndex === 0}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-2xl bg-white px-4 py-3 font-black shadow-sm disabled:opacity-40"
+                          onClick={() => moveBuilderSection(sectionIndex, 1)}
+                          disabled={sectionIndex === templateDraft.structure.length - 1}
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-2xl bg-white px-4 py-3 font-bold shadow-sm"
+                          onClick={() => duplicateBuilderSection(section, sectionIndex)}
+                        >
+                          কপি
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-2xl bg-rose-50 px-4 py-3 font-bold text-rose-700 shadow-sm"
+                          onClick={() => removeBuilderSection(sectionIndex)}
+                        >
+                          বাদ
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <div className="rounded-2xl bg-white p-3">
+                        <div className="text-sm font-bold text-[var(--ink-soft)]">
+                          কতটি প্রশ্ন
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <button
+                            type="button"
+                            className="grid h-12 w-12 place-items-center rounded-full bg-[#f2eadb] text-2xl font-black"
+                            onClick={() =>
+                              changeBuilderItemCount(sectionIndex, section.itemCount - 1)
+                            }
+                          >
+                            -
+                          </button>
+                          <div className="text-4xl font-black">
+                            {toBanglaDigits(section.itemCount)}
+                          </div>
+                          <button
+                            type="button"
+                            className="grid h-12 w-12 place-items-center rounded-full bg-[var(--brand)] text-2xl font-black text-white"
+                            onClick={() =>
+                              changeBuilderItemCount(sectionIndex, section.itemCount + 1)
+                            }
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl bg-white p-3">
+                        <div className="text-sm font-bold text-[var(--ink-soft)]">
+                          প্রতি প্রশ্নে নম্বর
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <button
+                            type="button"
+                            className="grid h-12 w-12 place-items-center rounded-full bg-[#f2eadb] text-2xl font-black"
+                            onClick={() => changeBuilderMarks(sectionIndex, marksEach - 0.5)}
+                          >
+                            -
+                          </button>
+                          <div className="text-4xl font-black">
+                            {section.marksPattern
+                              ? section.marksPattern.map(toBanglaDigits).join("+")
+                              : toBanglaDigits(marksEach)}
+                          </div>
+                          <button
+                            type="button"
+                            className="grid h-12 w-12 place-items-center rounded-full bg-[var(--brand)] text-2xl font-black text-white"
+                            onClick={() => changeBuilderMarks(sectionIndex, marksEach + 0.5)}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <details className="mt-3 rounded-2xl bg-white/70 px-4 py-3">
+                      <summary className="cursor-pointer text-base font-bold text-[var(--brand)]">
+                        দরকার হলে বিস্তারিত বদলান
+                      </summary>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <label className="text-sm font-bold text-[var(--ink-soft)]">
+                          নির্দেশনা
+                          <input
+                            className="field mt-2"
+                            value={section.instructions ?? ""}
+                            onChange={(event) =>
+                              updateTemplateSection(sectionIndex, (current) => ({
+                                ...current,
+                                instructions: event.target.value || undefined,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="text-sm font-bold text-[var(--ink-soft)]">
+                          আলাদা নম্বর হলে লিখুন, যেমন 1, 2
+                          <input
+                            className="field mt-2"
+                            value={
+                              section.marksPattern?.join(", ") ??
+                              String(section.marksPerItem ?? 1)
+                            }
+                            onChange={(event) =>
+                              updateTemplateSection(sectionIndex, (current) => {
+                                const parts = event.target.value
+                                  .split(/[, ]+/)
+                                  .map((item) => Number(item))
+                                  .filter((item) => item > 0);
+                                if (parts.length > 1) {
+                                  return {
+                                    ...current,
+                                    itemCount: parts.length,
+                                    marksPattern: parts,
+                                    marksPerItem: undefined,
+                                  };
+                                }
+
+                                return {
+                                  ...current,
+                                  marksPattern: undefined,
+                                  marksPerItem: parts[0] ?? current.marksPerItem ?? 1,
+                                };
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                    </details>
+                  </div>
+                );
+              })}
+
+              <div
+                className="rounded-[1.75rem] border-2 border-dashed border-[var(--line-strong)] bg-[#fff7ea] px-5 py-8 text-center text-lg font-bold text-[var(--ink-soft)]"
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDropTargetIndex(templateDraft.structure.length);
+                }}
+                onDrop={(event) =>
+                  handleBuilderDrop(event, templateDraft.structure.length)
+                }
+              >
+                নতুন প্রশ্নের ধরন এখানে টেনে আনতে পারেন
+              </div>
+            </div>
+          </main>
+
+          <aside className="space-y-5">
+            <div className="rounded-[2rem] border border-[var(--line)] bg-white/88 p-5 shadow-lg">
+              <h2 className="text-2xl font-black">আজকের পাঠ</h2>
+              <p className="mt-3 text-xl font-black">{focusedChapter.title}</p>
+              <p className="mt-1 text-base text-[var(--ink-soft)]">
+                পৃষ্ঠা {toBanglaDigits(focusedChapter.startPage ?? "?")} -{" "}
+                {toBanglaDigits(focusedChapter.endPage ?? "?")}
+              </p>
+              <div className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-lg font-black text-emerald-800">
+                পাঠ প্রস্তুত
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-[var(--line)] bg-white/88 p-5 shadow-lg">
+              <h2 className="text-2xl font-black">শেষ ধাপ</h2>
+              <p className="mt-2 text-base leading-7 text-[var(--ink-soft)]">
+                নম্বর ঠিক থাকলে নিচের বোতাম চাপলেই খসড়া প্রশ্নপত্র তৈরি হবে।
+              </p>
+              <label className="mt-4 flex items-start gap-3 rounded-2xl bg-[#fff7ea] p-3">
+                <input
+                  type="checkbox"
+                  checked={allowReuse}
+                  onChange={(event) => setAllowReuse(event.target.checked)}
+                  className="mt-1 h-5 w-5 accent-[var(--brand)]"
+                />
+                <span className="text-base leading-7 text-[var(--ink-soft)]">
+                  আগের প্রশ্ন আবার ব্যবহার করা যাবে
+                </span>
+              </label>
+              <button
+                className="mt-4 flex w-full items-center justify-center gap-3 rounded-[1.5rem] bg-[var(--brand)] px-5 py-5 text-2xl font-black text-white shadow-xl disabled:opacity-50"
+                type="button"
+                onClick={generatePaper}
+                disabled={
+                  Boolean(busyMessage) ||
+                  activeBook.importStatus === "FAILED" ||
+                  activeBook.importStatus === "INDEXING" ||
+                  !builderMarksReady
+                }
+              >
+                <Sparkles size={24} />
+                প্রশ্নপত্র বানান
+              </button>
+              {recentPapers.length === 0 ? (
+                <p className="mt-4 text-base text-[var(--ink-soft)]">
+                  এখনো কোনো খসড়া বানানো হয়নি।
+                </p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {recentPapers.slice(0, 3).map((paper) => (
+                    <button
+                      key={paper.id}
+                      type="button"
+                      className="w-full rounded-2xl bg-white p-3 text-left shadow-sm"
+                      onClick={() => setSelectedReviewPaperId(paper.id)}
+                    >
+                      <div className="font-bold">{formatExamType(paper.examType)}</div>
+                      <div className="text-sm text-[var(--ink-soft)]">
+                        {formatAppDate(paper.createdAt)} · মান{" "}
+                        {toBanglaDigits(paper.qualityReport?.score ?? "?")}/১০০
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        </section>
+
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--line)] bg-white/95 px-4 py-3 shadow-[0_-16px_40px_rgba(31,54,49,.12)] backdrop-blur md:hidden">
+          <button
+            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[var(--brand)] px-5 py-4 text-xl font-black text-white disabled:opacity-50"
+            type="button"
+            onClick={generatePaper}
+            disabled={
+              Boolean(busyMessage) ||
+              activeBook.importStatus === "FAILED" ||
+              activeBook.importStatus === "INDEXING" ||
+              !builderMarksReady
+            }
+          >
+            <Sparkles size={22} />
+            প্রশ্নপত্র বানান · {toBanglaDigits(builderUsedMarks)}/
+            {toBanglaDigits(templateDraft.totalMarks)}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
