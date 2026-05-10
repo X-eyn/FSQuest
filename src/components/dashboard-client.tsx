@@ -80,6 +80,10 @@ export function DashboardClient({
       deferredBooks[0],
     [deferredBooks, resolvedSelectedBookId],
   );
+  const focusedSingleChapterMode =
+    deferredBooks.length === 1 &&
+    activeBook?.importStatus === "INDEXED" &&
+    activeBook.chapters.length === 1;
 
   const matchingTemplate = useMemo(
     () =>
@@ -507,7 +511,12 @@ export function DashboardClient({
         )}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.05fr_1fr_1fr]">
+      <section
+        className={`grid gap-6 ${
+          focusedSingleChapterMode ? "xl:grid-cols-1" : "xl:grid-cols-[1.05fr_1fr_1fr]"
+        }`}
+      >
+        {!focusedSingleChapterMode && (
         <div className="card rounded-[1.75rem] p-6">
           <div className="flex items-center gap-3">
             <Upload size={18} className="text-[var(--brand)]" />
@@ -588,7 +597,9 @@ export function DashboardClient({
             </div>
           </form>
         </div>
+        )}
 
+        {!focusedSingleChapterMode && (
         <div className="card rounded-[1.75rem] p-6">
           <div className="flex items-center gap-3">
             <BookOpen size={18} className="text-[var(--accent)]" />
@@ -641,6 +652,7 @@ export function DashboardClient({
             })}
           </div>
         </div>
+        )}
 
         <div className="card rounded-[1.75rem] p-6">
           <div className="flex items-center gap-3">
@@ -825,7 +837,7 @@ export function DashboardClient({
                 paper.
               </p>
             </div>
-            {activeBook && (
+            {activeBook && !focusedSingleChapterMode && (
               <button
                 type="button"
                 className="btn-secondary"
@@ -853,6 +865,21 @@ export function DashboardClient({
                 </div>
               </div>
 
+              {focusedSingleChapterMode && activeBook.chapters[0] && (
+                <div className="mt-5 rounded-[1.5rem] border border-[var(--line)] bg-white/75 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink-soft)]">
+                    Focused chapter
+                  </div>
+                  <div className="mt-2 font-semibold">{activeBook.chapters[0].title}</div>
+                  <div className="mt-1 text-sm text-[var(--ink-soft)]">
+                    Pages {activeBook.chapters[0].startPage ?? "?"} -{" "}
+                    {activeBook.chapters[0].endPage ?? "?"} · Quality{" "}
+                    {activeBook.chapters[0].quality.score}/100
+                  </div>
+                </div>
+              )}
+
+              {!focusedSingleChapterMode && (
               <div className="mt-5">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h3 className="font-semibold">Select Chapters</h3>
@@ -921,11 +948,6 @@ export function DashboardClient({
                                 </span>
                               )}
                             </div>
-                            {chapter.excerpt && (
-                              <p className="mt-2 text-sm leading-6 text-[var(--ink-soft)]">
-                                {chapter.excerpt}
-                              </p>
-                            )}
                           </div>
                         </div>
                       </label>
@@ -933,6 +955,7 @@ export function DashboardClient({
                   })}
                 </div>
               </div>
+              )}
 
               <div className="mt-5 rounded-[1.5rem] border border-[var(--line)] bg-white/75 p-4">
                 <label className="flex items-start gap-3">
@@ -1154,7 +1177,7 @@ export function DashboardClient({
         </section>
       )}
 
-      {activeBook && (
+      {activeBook && !focusedSingleChapterMode && (
         <section className="card rounded-[1.75rem] p-6">
           <div className="flex items-center gap-3">
             <Save size={18} className="text-[var(--accent)]" />
