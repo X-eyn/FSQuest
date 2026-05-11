@@ -9,7 +9,7 @@ export default async function Home() {
   const data = await getDashboardData();
 
   return (
-    <main className="paper-grid flex-1">
+    <main className="flex-1 overflow-hidden">
       <DashboardClient initialData={data} />
     </main>
   );
