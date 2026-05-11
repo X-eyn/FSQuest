@@ -1,7 +1,9 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   Packer,
+  PageOrientation,
   Paragraph,
   Tab,
   TabStopType,
@@ -58,6 +60,7 @@ export async function buildQuestionPaperDocx(params: {
     );
   }
 
+  // Subject / exam line
   children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -80,7 +83,7 @@ export async function buildQuestionPaperDocx(params: {
       ],
     }),
     new Paragraph({
-      tabStops: [{ type: TabStopType.RIGHT, position: 9000 }],
+      tabStops: [{ type: TabStopType.RIGHT, position: 8640 }],
       spacing: { after: 40 },
       children: [
         run("Date: ____________________", { size: 22 }),
@@ -89,13 +92,21 @@ export async function buildQuestionPaperDocx(params: {
       ],
     }),
     new Paragraph({
-      tabStops: [{ type: TabStopType.RIGHT, position: 9000 }],
-      spacing: { after: 220 },
+      tabStops: [{ type: TabStopType.RIGHT, position: 8640 }],
+      spacing: { after: 60 },
       children: [
         run("Student Name: ____________________", { size: 22 }),
         new Tab(),
         run("Student No.: ____________________", { size: 22 }),
       ],
+    }),
+    // Horizontal rule separating header from questions
+    new Paragraph({
+      spacing: { after: 200 },
+      border: {
+        bottom: { color: "1d2d2a", style: BorderStyle.SINGLE, size: 6, space: 4 },
+      },
+      children: [],
     }),
   );
 
@@ -150,7 +161,14 @@ export async function buildQuestionPaperDocx(params: {
   const doc = new Document({
     sections: [
       {
-        properties: {},
+        properties: {
+          page: {
+            // A4: 210 × 297 mm in twips (1 mm = 56.69 twips)
+            size: { width: 11906, height: 16838, orientation: PageOrientation.PORTRAIT },
+            // Margins: 18mm top/bottom, 20mm left/right — comfortable for primary school papers
+            margin: { top: 1020, bottom: 1020, left: 1134, right: 1134 },
+          },
+        },
         children,
       },
     ],
